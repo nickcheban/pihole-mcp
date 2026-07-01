@@ -64,6 +64,13 @@ uvicorn server:app --host 0.0.0.0 --port 8002
 
 Systemd unit example: [`deploy/pihole-mcp.service`](deploy/pihole-mcp.service).
 
+**Docker:**
+
+```bash
+docker build -t pihole-mcp .
+docker run -p 8002:8002 --env-file .env pihole-mcp
+```
+
 ## Security model
 
 - Auth is an `Authorization: Bearer $MCP_SECRET` header on `/mcp`. Empty `MCP_SECRET` = no check (local network/VPN only).
