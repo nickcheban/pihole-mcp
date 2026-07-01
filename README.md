@@ -1,5 +1,8 @@
 # pihole-mcp
 
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+
 MCP-сервер для Pi-hole v6.x (новый `/api` эндпоинт, session-based авторизация через `X-FTL-SID`). Помимо прямого проксирования Pi-hole API даёт несколько составных инструментов для анализа устройств в сети (топ доменов, аномалии, подозрительная активность по NXDOMAIN/block-ratio) — их нет в самом Pi-hole API, это отдельная логика поверх `/api/queries`.
 
 ## Инструменты
@@ -67,6 +70,7 @@ Systemd-юнит — пример в [`deploy/pihole-mcp.service`](deploy/pihole
 - `/.well-known/oauth-authorization-server` + `/oauth/authorize` + `/oauth/token` — совместимая заглушка для custom-коннекторов claude.ai, у которых [нет поддержки статического API-ключа](https://claude.com/docs/connectors/building/authentication) — только полноценный OAuth 2.1 или отсутствие авторизации вовсе. Реальную защиту даёт Bearer-токен на `/mcp`. Через Claude Code CLI (`claude mcp add --header ...`) заглушка не нужна.
 - `redirect_uri` в `/oauth/authorize` — allowlist (`claude.ai`, `anthropic.com`, `console.anthropic.com`, `localhost`).
 - Pi-hole API не умеет фильтровать `/queries` по `client=` на своей стороне — сервер тянет последние N (по умолчанию 5000) записей по всей сети и фильтрует сам, с явным предупреждением в ответе, если окно могло не покрыть всю историю нужного клиента.
+- **Транспорт**: сервер сам не терминирует TLS — слушает голый HTTP. Если он доступен за пределами localhost/доверенной LAN (а тем более если вы подключаете его как custom-коннектор в claude.ai — там HTTPS обязателен), обязательно ставьте перед ним TLS-терминацию: Cloudflare Tunnel, Tailscale Funnel, nginx/Caddy + Let's Encrypt и т.п. Без этого Bearer-токен (`MCP_SECRET`) в заголовке `Authorization` уходит в сеть открытым текстом.
 
 ## Требования
 
