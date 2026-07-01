@@ -1,0 +1,14 @@
+[Unit]
+Description=Pi-hole MCP Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/pihole-mcp
+EnvironmentFile=/opt/pihole-mcp/.env
+ExecStart=/opt/pihole-mcp/venv/bin/uvicorn server:app --host 0.0.0.0 --port 8002
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
