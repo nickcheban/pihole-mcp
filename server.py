@@ -41,9 +41,9 @@ ALLOWED_STATUSES = {"FORWARDED", "CACHE", "CACHE_STALE", "RETRIED", "RETRIED_DNS
 BLOCKED_STATUSES = {"GRAVITY", "REGEX", "DENYLIST", "GRAVITY_CNAME", "REGEX_CNAME", "DENYLIST_CNAME"}
 NXDOMAIN_STATUS  = "NXDOMAIN"
 
-# Сколько последних (по всей сети) записей реально тянем из /api/queries,
-# когда требуется client-side фильтрация по IP клиента.
-# Pi-hole API не поддерживает фильтр client= на своей стороне (см. search_query_log).
+# How many of the most recent records (across the whole network) we actually pull
+# from /api/queries when client-side filtering by client IP is required.
+# The Pi-hole API doesn't support a server-side client= filter (see search_query_log).
 CLIENT_FILTER_FETCH_LENGTH = 5000
 
 
@@ -100,8 +100,8 @@ async def api(method: str, path: str, params=None, timeout: float = 10.0, **kwar
 
 
 async def api_raw(method: str, path: str, params=None, timeout: float = 30.0, **kwargs):
-    """Как api(), но возвращает httpx.Response как есть, без json()/text-декодирования —
-    нужно для бинарных ответов вроде zip-архива Teleporter."""
+    """Like api(), but returns the httpx.Response as-is, without json()/text decoding —
+    needed for binary responses like the Teleporter zip archive."""
     global _sid
     sid = await ensure_sid()
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -129,51 +129,51 @@ def clamp(value, default, min_val, max_val) -> int:
 
 def _client_filter_warning(total_fetched: int, fetch_length: int, matched: int) -> str | None:
     """
-    Pi-hole API не фильтрует /queries по client= — мы тянем последние
-    `fetch_length` записей по всей сети и фильтруем на стороне сервера.
-    Если api вернул ровно `fetch_length` записей (т.е. в БД их больше, чем
-    мы запросили), результат покрывает только ЭТУ глубину по времени —
-    более старые совпадения для нужного клиента могли быть не учтены.
+    The Pi-hole API doesn't filter /queries by client= — we pull the most recent
+    `fetch_length` records across the whole network and filter server-side.
+    If the api returned exactly `fetch_length` records (i.e. there are more in the
+    DB than we requested), the result only covers that time depth — older matches
+    for the target client may not have been captured.
     """
     if total_fetched >= fetch_length:
         return (
-            f"Внимание: выборка ограничена последними {fetch_length} запросами по всей сети "
-            f"(Pi-hole API не поддерживает фильтр по client на своей стороне). "
-            f"Найдено совпадений в этом окне: {matched}. "
-            f"Если ожидалось больше или более старые записи — сузьте from_time/until_time "
-            f"или учтите, что часть истории может быть не охвачена."
+            f"Note: the sample is limited to the {fetch_length} most recent queries across "
+            f"the whole network (the Pi-hole API doesn't support a server-side client filter). "
+            f"Matches found in this window: {matched}. "
+            f"If you expected more, or older records, narrow from_time/until_time "
+            f"or account for the fact that part of the history may not be covered."
         )
     return None
 
 
 TOOLS = [
-    {"name": "get_stats", "description": "Общая статистика Pi-hole: запросов всего, заблокировано, уникальных клиентов, доменов в Gravity", "inputSchema": {"type": "object", "properties": {}, "required": []}},
-    {"name": "get_top_domains", "description": "Топ запрашиваемых или заблокированных доменов. blocked=true — только заблокированные, blocked=false — все запросы", "inputSchema": {"type": "object", "properties": {"count": {"type": "integer", "description": "Количество записей (default: 10, max: 100)"}, "blocked": {"type": "boolean", "description": "true — топ заблокированных, false/не указано — топ всех запросов"}}, "required": []}},
-    {"name": "get_top_clients", "description": "Топ клиентов по количеству DNS запросов", "inputSchema": {"type": "object", "properties": {"count": {"type": "integer", "description": "Количество записей (default: 10, max: 100)"}}, "required": []}},
-    {"name": "search_query_log", "description": "Поиск в логе DNS запросов по домену или IP клиента", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "description": "Домен для поиска"}, "client": {"type": "string", "description": "IP клиента"}, "limit": {"type": "integer", "description": "Максимум записей (default: 50, max: 500)"}, "from_time": {"type": "integer", "description": "Начало периода (Unix timestamp)"}, "until_time": {"type": "integer", "description": "Конец периода (Unix timestamp)"}}, "required": []}},
-    {"name": "check_domain", "description": "Проверить статус домена — заблокирован ли он и в каких списках находится", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "description": "Домен для проверки"}}, "required": ["domain"]}},
-    {"name": "add_to_denylist", "description": "Добавить домен в чёрный список (точное совпадение)", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string"}, "comment": {"type": "string", "description": "Комментарий (опционально)"}}, "required": ["domain"]}},
-    {"name": "remove_from_denylist", "description": "Удалить домен из чёрного списка", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string"}}, "required": ["domain"]}},
-    {"name": "add_to_allowlist", "description": "Добавить домен в белый список (разблокировать)", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string"}, "comment": {"type": "string", "description": "Комментарий (опционально)"}}, "required": ["domain"]}},
-    {"name": "set_local_dns", "description": "Установить или обновить локальную DNS A-запись (override) — Pi-hole отдаёт указанный IP для домена, минуя обычный upstream. Не влияет на блокировку рекламы для других доменов", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "description": "Домен (например nas.home)"}, "ip": {"type": "string", "description": "IP-адрес для override"}}, "required": ["domain", "ip"]}},
-    {"name": "remove_local_dns", "description": "Удалить локальную DNS A-запись (override) для домена", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string"}}, "required": ["domain"]}},
-    {"name": "get_local_dns", "description": "Получить список всех текущих локальных DNS A-записей (overrides)", "inputSchema": {"type": "object", "properties": {}, "required": []}},
-    {"name": "toggle_blocking", "description": "Включить или выключить блокировку Pi-hole", "inputSchema": {"type": "object", "properties": {"enable": {"type": "boolean", "description": "true — включить, false — выключить"}, "duration": {"type": "integer", "description": "Секунд до автовключения при выключении (0 = навсегда, max: 86400)"}}, "required": ["enable"]}},
-    {"name": "get_blocking_status", "description": "Текущий статус блокировки Pi-hole (включена/выключена)", "inputSchema": {"type": "object", "properties": {}, "required": []}},
-    {"name": "gravity_update", "description": "Обновить списки блокировок (gravity update). Операция занимает 1–3 минуты", "inputSchema": {"type": "object", "properties": {}, "required": []}},
-    {"name": "get_recently_blocked", "description": "Последние заблокированные DNS запросы (Gravity, regex, exact, CNAME)", "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "description": "Количество записей (default: 20, max: 200)"}}, "required": []}},
-    {"name": "analyze_anomalies", "description": "Найти аномально активные клиенты в сети по количеству DNS запросов", "inputSchema": {"type": "object", "properties": {"threshold": {"type": "integer", "description": "Порог запросов для флага аномалии (default: 1000)"}}, "required": []}},
-    {"name": "get_client_info", "description": "Профиль клиента по IP: количество запросов, заблокировано, детали", "inputSchema": {"type": "object", "properties": {"client": {"type": "string", "description": "IP адрес клиента"}}, "required": ["client"]}},
-    {"name": "get_recent_queries", "description": "Последние DNS запросы конкретного клиента", "inputSchema": {"type": "object", "properties": {"client": {"type": "string", "description": "IP адрес клиента"}, "limit": {"type": "integer", "description": "Количество записей (default: 50, max: 200)"}, "from_time": {"type": "integer", "description": "Начало периода (Unix timestamp)"}, "until_time": {"type": "integer", "description": "Конец периода (Unix timestamp)"}}, "required": ["client"]}},
-    {"name": "analyze_device", "description": "Комплексный анализ устройства по IP: статистика, топ доменов, блокировки, NXDOMAIN, подозрительная активность", "inputSchema": {"type": "object", "properties": {"client": {"type": "string", "description": "IP адрес устройства"}, "limit": {"type": "integer", "description": "Запросов для анализа (default: 200, max: 500)"}, "from_time": {"type": "integer", "description": "Начало периода (Unix timestamp)"}, "until_time": {"type": "integer", "description": "Конец периода (Unix timestamp)"}}, "required": ["client"]}},
-    {"name": "get_local_cname_records", "description": "Получить список всех локальных CNAME-записей (DNS-алиасов)", "inputSchema": {"type": "object", "properties": {}, "required": []}},
-    {"name": "set_local_cname_record", "description": "Установить или обновить локальную CNAME-запись (алиас домена на другой домен)", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "description": "Домен-алиас (источник)"}, "target": {"type": "string", "description": "Целевой домен, на который указывает алиас"}, "ttl": {"type": "integer", "description": "TTL в секундах (опционально)"}}, "required": ["domain", "target"]}},
-    {"name": "remove_local_cname_record", "description": "Удалить локальную CNAME-запись по домену-источнику", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "description": "Домен-алиас (источник) для удаления"}}, "required": ["domain"]}},
-    {"name": "add_to_denylist_regex", "description": "Добавить regex-паттерн в чёрный список (блокирует все домены, подходящие под паттерн)", "inputSchema": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex-паттерн, например (\\.|^)ads\\.example\\.com$"}, "comment": {"type": "string", "description": "Комментарий (опционально)"}}, "required": ["pattern"]}},
-    {"name": "remove_from_denylist_regex", "description": "Удалить regex-паттерн из чёрного списка", "inputSchema": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}},
-    {"name": "add_to_allowlist_regex", "description": "Добавить regex-паттерн в белый список (разблокирует все домены, подходящие под паттерн)", "inputSchema": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex-паттерн"}, "comment": {"type": "string", "description": "Комментарий (опционально)"}}, "required": ["pattern"]}},
-    {"name": "remove_from_allowlist_regex", "description": "Удалить regex-паттерн из белого списка", "inputSchema": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}},
-    {"name": "teleporter_backup", "description": "Полный бэкап конфигурации Pi-hole (Teleporter) — списки, настройки, группы — в виде zip-архива, закодированного в base64. Только экспорт; восстановление (загрузка обратно) этим инструментом не поддерживается намеренно.", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+    {"name": "get_stats", "description": "Overall Pi-hole stats: total queries, blocked, unique clients, domains on Gravity", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+    {"name": "get_top_domains", "description": "Top queried or blocked domains. blocked=true — blocked only, blocked=false — all queries", "inputSchema": {"type": "object", "properties": {"count": {"type": "integer", "description": "Number of entries (default: 10, max: 100)"}, "blocked": {"type": "boolean", "description": "true — top blocked, false/unset — top of all queries"}}, "required": []}},
+    {"name": "get_top_clients", "description": "Top clients by number of DNS queries", "inputSchema": {"type": "object", "properties": {"count": {"type": "integer", "description": "Number of entries (default: 10, max: 100)"}}, "required": []}},
+    {"name": "search_query_log", "description": "Search the DNS query log by domain or client IP", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "description": "Domain to search for"}, "client": {"type": "string", "description": "Client IP"}, "limit": {"type": "integer", "description": "Max entries (default: 50, max: 500)"}, "from_time": {"type": "integer", "description": "Period start (Unix timestamp)"}, "until_time": {"type": "integer", "description": "Period end (Unix timestamp)"}}, "required": []}},
+    {"name": "check_domain", "description": "Check a domain's status — is it blocked, and in which list", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "description": "Domain to check"}}, "required": ["domain"]}},
+    {"name": "add_to_denylist", "description": "Add a domain to the denylist (exact match)", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string"}, "comment": {"type": "string", "description": "Comment (optional)"}}, "required": ["domain"]}},
+    {"name": "remove_from_denylist", "description": "Remove a domain from the denylist", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string"}}, "required": ["domain"]}},
+    {"name": "add_to_allowlist", "description": "Add a domain to the allowlist (unblock it)", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string"}, "comment": {"type": "string", "description": "Comment (optional)"}}, "required": ["domain"]}},
+    {"name": "set_local_dns", "description": "Set or update a local DNS A-record override — Pi-hole serves the given IP for the domain, bypassing normal upstream resolution. Doesn't affect ad blocking for other domains", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "description": "Domain (e.g. nas.home)"}, "ip": {"type": "string", "description": "IP address for the override"}}, "required": ["domain", "ip"]}},
+    {"name": "remove_local_dns", "description": "Remove a local DNS A-record override for a domain", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string"}}, "required": ["domain"]}},
+    {"name": "get_local_dns", "description": "Get the list of all current local DNS A-record overrides", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+    {"name": "toggle_blocking", "description": "Turn Pi-hole blocking on or off", "inputSchema": {"type": "object", "properties": {"enable": {"type": "boolean", "description": "true — enable, false — disable"}, "duration": {"type": "integer", "description": "Seconds until auto re-enable when disabling (0 = indefinitely, max: 86400)"}}, "required": ["enable"]}},
+    {"name": "get_blocking_status", "description": "Current Pi-hole blocking status (enabled/disabled)", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+    {"name": "gravity_update", "description": "Update the blocklists (gravity update). Takes 1-3 minutes", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+    {"name": "get_recently_blocked", "description": "Most recently blocked DNS queries (Gravity, regex, exact, CNAME)", "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "description": "Number of entries (default: 20, max: 200)"}}, "required": []}},
+    {"name": "analyze_anomalies", "description": "Find clients with an anomalously high number of DNS queries", "inputSchema": {"type": "object", "properties": {"threshold": {"type": "integer", "description": "Query-count threshold to flag an anomaly (default: 1000)"}}, "required": []}},
+    {"name": "get_client_info", "description": "Client profile by IP: query count, blocked count, details", "inputSchema": {"type": "object", "properties": {"client": {"type": "string", "description": "Client IP address"}}, "required": ["client"]}},
+    {"name": "get_recent_queries", "description": "Most recent DNS queries for a specific client", "inputSchema": {"type": "object", "properties": {"client": {"type": "string", "description": "Client IP address"}, "limit": {"type": "integer", "description": "Number of entries (default: 50, max: 200)"}, "from_time": {"type": "integer", "description": "Period start (Unix timestamp)"}, "until_time": {"type": "integer", "description": "Period end (Unix timestamp)"}}, "required": ["client"]}},
+    {"name": "analyze_device", "description": "Comprehensive per-device analysis by IP: stats, top domains, blocks, NXDOMAIN, suspicious activity", "inputSchema": {"type": "object", "properties": {"client": {"type": "string", "description": "Device IP address"}, "limit": {"type": "integer", "description": "Queries to analyze (default: 200, max: 500)"}, "from_time": {"type": "integer", "description": "Period start (Unix timestamp)"}, "until_time": {"type": "integer", "description": "Period end (Unix timestamp)"}}, "required": ["client"]}},
+    {"name": "get_local_cname_records", "description": "Get the list of all local CNAME records (DNS aliases)", "inputSchema": {"type": "object", "properties": {}, "required": []}},
+    {"name": "set_local_cname_record", "description": "Set or update a local CNAME record (alias one domain to another)", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "description": "Alias domain (source)"}, "target": {"type": "string", "description": "Target domain the alias points to"}, "ttl": {"type": "integer", "description": "TTL in seconds (optional)"}}, "required": ["domain", "target"]}},
+    {"name": "remove_local_cname_record", "description": "Remove a local CNAME record by its source domain", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "description": "Alias domain (source) to remove"}}, "required": ["domain"]}},
+    {"name": "add_to_denylist_regex", "description": "Add a regex pattern to the denylist (blocks all domains matching the pattern)", "inputSchema": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex pattern, e.g. (\\.|^)ads\\.example\\.com$"}, "comment": {"type": "string", "description": "Comment (optional)"}}, "required": ["pattern"]}},
+    {"name": "remove_from_denylist_regex", "description": "Remove a regex pattern from the denylist", "inputSchema": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}},
+    {"name": "add_to_allowlist_regex", "description": "Add a regex pattern to the allowlist (unblocks all domains matching the pattern)", "inputSchema": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Regex pattern"}, "comment": {"type": "string", "description": "Comment (optional)"}}, "required": ["pattern"]}},
+    {"name": "remove_from_allowlist_regex", "description": "Remove a regex pattern from the allowlist", "inputSchema": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}},
+    {"name": "teleporter_backup", "description": "Full Pi-hole configuration backup (Teleporter) — lists, settings, groups — as a base64-encoded zip archive. Export only; restore (uploading it back) is intentionally not supported by this tool.", "inputSchema": {"type": "object", "properties": {}, "required": []}},
 ]
 
 
@@ -196,7 +196,7 @@ async def run_tool(name: str, args: dict):
         limit = clamp(args.get("limit"), 50, 1, 500)
         client_filter = args.get("client")
         domain_filter = args.get("domain")
-        # Pi-hole API игнорирует client= параметр — фильтруем на стороне сервера
+        # The Pi-hole API ignores the client= parameter — filter server-side ourselves
         fetch_limit = CLIENT_FILTER_FETCH_LENGTH if client_filter else limit
         params = {"length": fetch_limit}
         if domain_filter: params["domain"] = domain_filter
@@ -239,7 +239,7 @@ async def run_tool(name: str, args: dict):
         deleted, failed = [], []
         for d in matches:
             try:
-                # DELETE в Pi-hole v6 API принимает сам домен в пути, не числовой id
+                # The Pi-hole v6 API DELETE endpoint takes the domain itself in the path, not a numeric id
                 await api("delete", f"/domains/deny/exact/{quote(d['domain'], safe='')}")
                 deleted.append(d["domain"])
             except Exception as e:
@@ -267,7 +267,7 @@ async def run_tool(name: str, args: dict):
         hosts   = current.get("config", {}).get("dns", {}).get("hosts", [])
         new_hosts = [h for h in hosts if not h.strip().endswith(f" {domain}")]
         if len(new_hosts) == len(hosts):
-            return {"domain": domain, "found": False, "message": "Запись не найдена"}
+            return {"domain": domain, "found": False, "message": "Record not found"}
         return await api("patch", "/config", json={"config": {"dns": {"hosts": new_hosts}}})
 
     elif name == "toggle_blocking":
@@ -385,13 +385,13 @@ async def run_tool(name: str, args: dict):
         if total > 0:
             block_ratio = len(blocked) / total
             if block_ratio > 0.5:
-                suspicion.append(f"Высокий процент блокировок: {block_ratio:.0%}")
+                suspicion.append(f"High block ratio: {block_ratio:.0%}")
             if len(nxdomain) > 20:
-                suspicion.append(f"Много NXDOMAIN: {len(nxdomain)} — возможно сломанное приложение")
+                suspicion.append(f"Lots of NXDOMAIN: {len(nxdomain)} — possibly a broken app")
             if len(nxdomain) > 50:
-                suspicion.append("⚠️ Очень много NXDOMAIN — возможен DNS tunneling или malware")
+                suspicion.append("⚠️ Very high NXDOMAIN count — possible DNS tunneling or malware")
         else:
-            suspicion.append("Нет активных DNS-запросов за выбранный период логов")
+            suspicion.append("No active DNS queries in the selected log period")
         clients_list = top_clients.get("clients", []) if isinstance(top_clients, dict) else []
         rank = next((i+1 for i, c in enumerate(clients_list) if c.get("ip") == client), None)
         response = {
@@ -427,7 +427,7 @@ async def run_tool(name: str, args: dict):
         records = current.get("config", {}).get("dns", {}).get("cnameRecords", [])
         new_records = [r for r in records if r.split(",", 1)[0].strip() != domain]
         if len(new_records) == len(records):
-            return {"domain": domain, "found": False, "message": "CNAME-запись не найдена"}
+            return {"domain": domain, "found": False, "message": "CNAME record not found"}
         return await api("patch", "/config", json={"config": {"dns": {"cnameRecords": new_records}}})
 
     elif name == "add_to_denylist_regex":
@@ -439,7 +439,7 @@ async def run_tool(name: str, args: dict):
         domains = result.get("domains", [])
         matches = [d for d in domains if d.get("domain") == pattern]
         if not matches:
-            return {"error": f"Regex-паттерн '{pattern}' не найден в чёрном списке"}
+            return {"error": f"Regex pattern '{pattern}' not found in denylist"}
         deleted, failed = [], []
         for d in matches:
             try:
@@ -458,7 +458,7 @@ async def run_tool(name: str, args: dict):
         domains = result.get("domains", [])
         matches = [d for d in domains if d.get("domain") == pattern]
         if not matches:
-            return {"error": f"Regex-паттерн '{pattern}' не найден в белом списке"}
+            return {"error": f"Regex pattern '{pattern}' not found in allowlist"}
         deleted, failed = [], []
         for d in matches:
             try:

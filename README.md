@@ -3,80 +3,80 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 
-MCP-сервер для Pi-hole v6.x (новый `/api` эндпоинт, session-based авторизация через `X-FTL-SID`). Помимо прямого проксирования Pi-hole API даёт несколько составных инструментов для анализа устройств в сети (топ доменов, аномалии, подозрительная активность по NXDOMAIN/block-ratio) — их нет в самом Pi-hole API, это отдельная логика поверх `/api/queries`.
+MCP server for Pi-hole v6.x (the new `/api` endpoint, session-based auth via `X-FTL-SID`). Besides direct Pi-hole API proxying, it provides a few composite tools for analyzing devices on the network (top domains, anomalies, suspicious activity via NXDOMAIN/block-ratio) — these aren't in the Pi-hole API itself, they're extra logic layered on top of `/api/queries`.
 
-## Инструменты
+## Tools
 
-**Статистика и запросы**
+**Stats and queries**
 
-| Инструмент | Описание |
+| Tool | Description |
 |---|---|
-| `get_stats` | Общая статистика: запросов всего, заблокировано, клиентов, доменов в Gravity |
-| `get_top_domains` | Топ запрашиваемых/заблокированных доменов |
-| `get_top_clients` | Топ клиентов по количеству запросов |
-| `search_query_log` | Поиск в логе по домену/IP клиента, с фильтром по времени |
-| `get_recently_blocked` | Последние заблокированные запросы |
-| `check_domain` | Статус домена — заблокирован ли и в каком списке |
+| `get_stats` | Overall stats: total queries, blocked, clients, domains on Gravity |
+| `get_top_domains` | Top queried/blocked domains |
+| `get_top_clients` | Top clients by query count |
+| `search_query_log` | Search the log by domain/client IP, with a time filter |
+| `get_recently_blocked` | Most recently blocked queries |
+| `check_domain` | Domain status — is it blocked, and in which list |
 
-**Анализ устройства**
+**Device analysis**
 
-| Инструмент | Описание |
+| Tool | Description |
 |---|---|
-| `get_client_info` | Профиль клиента: запросы, блокировки, детали |
-| `get_recent_queries` | Последние запросы конкретного клиента |
-| `analyze_device` | Комплексный анализ: топ доменов, block-ratio, NXDOMAIN-флаги (возможный DNS tunneling/malware) |
-| `analyze_anomalies` | Клиенты с аномально высоким числом запросов |
+| `get_client_info` | Client profile: queries, blocks, details |
+| `get_recent_queries` | Recent queries from a specific client |
+| `analyze_device` | Comprehensive analysis: top domains, block ratio, NXDOMAIN flags (possible DNS tunneling/malware) |
+| `analyze_anomalies` | Clients with an anomalously high number of queries |
 
-**Списки (allow/deny, exact и regex)**
+**Lists (allow/deny, exact and regex)**
 
-| Инструмент | Описание |
+| Tool | Description |
 |---|---|
-| `add_to_denylist` / `remove_from_denylist` | Точный домен в чёрный список |
-| `add_to_allowlist` | Точный домен в белый список |
-| `add_to_denylist_regex` / `remove_from_denylist_regex` | Regex-паттерн в чёрный список |
-| `add_to_allowlist_regex` / `remove_from_allowlist_regex` | Regex-паттерн в белый список |
+| `add_to_denylist` / `remove_from_denylist` | Exact-match domain in the denylist |
+| `add_to_allowlist` | Exact-match domain in the allowlist |
+| `add_to_denylist_regex` / `remove_from_denylist_regex` | Regex pattern in the denylist |
+| `add_to_allowlist_regex` / `remove_from_allowlist_regex` | Regex pattern in the allowlist |
 
-**Локальный DNS**
+**Local DNS**
 
-| Инструмент | Описание |
+| Tool | Description |
 |---|---|
-| `get_local_dns` / `set_local_dns` / `remove_local_dns` | A-записи (override) |
-| `get_local_cname_records` / `set_local_cname_record` / `remove_local_cname_record` | CNAME-записи |
+| `get_local_dns` / `set_local_dns` / `remove_local_dns` | A-record overrides |
+| `get_local_cname_records` / `set_local_cname_record` / `remove_local_cname_record` | CNAME records |
 
-**Управление и бэкап**
+**Management and backup**
 
-| Инструмент | Описание |
+| Tool | Description |
 |---|---|
-| `toggle_blocking` / `get_blocking_status` | Включить/выключить блокировку, с таймером авто-включения |
-| `gravity_update` | Обновить списки блокировок |
-| `teleporter_backup` | Полный бэкап конфигурации (Teleporter) в base64. Только экспорт — восстановление намеренно не реализовано |
+| `toggle_blocking` / `get_blocking_status` | Turn blocking on/off, with an auto-re-enable timer |
+| `gravity_update` | Update the blocklists |
+| `teleporter_backup` | Full configuration backup (Teleporter) as base64. Export only — restore intentionally not implemented |
 
-## Установка
+## Setup
 
 ```bash
 git clone <this-repo> pihole-mcp && cd pihole-mcp
 python3 -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env       # заполните PIHOLE_URL / PIHOLE_PASSWORD / MCP_SECRET
+cp .env.example .env       # fill in PIHOLE_URL / PIHOLE_PASSWORD / MCP_SECRET
 uvicorn server:app --host 0.0.0.0 --port 8002
 ```
 
-Systemd-юнит — пример в [`deploy/pihole-mcp.service`](deploy/pihole-mcp.service).
+Systemd unit example: [`deploy/pihole-mcp.service`](deploy/pihole-mcp.service).
 
 ## Security model
 
-- Авторизация — `Authorization: Bearer $MCP_SECRET` на `/mcp`. Пустой `MCP_SECRET` = без проверки (только локальная сеть/VPN).
-- `/.well-known/oauth-authorization-server` + `/oauth/authorize` + `/oauth/token` — совместимая заглушка для custom-коннекторов claude.ai, у которых [нет поддержки статического API-ключа](https://claude.com/docs/connectors/building/authentication) — только полноценный OAuth 2.1 или отсутствие авторизации вовсе. Реальную защиту даёт Bearer-токен на `/mcp`. Через Claude Code CLI (`claude mcp add --header ...`) заглушка не нужна.
-- `redirect_uri` в `/oauth/authorize` — allowlist (`claude.ai`, `anthropic.com`, `console.anthropic.com`, `localhost`).
-- Pi-hole API не умеет фильтровать `/queries` по `client=` на своей стороне — сервер тянет последние N (по умолчанию 5000) записей по всей сети и фильтрует сам, с явным предупреждением в ответе, если окно могло не покрыть всю историю нужного клиента.
-- **Транспорт**: сервер сам не терминирует TLS — слушает голый HTTP. Если он доступен за пределами localhost/доверенной LAN (а тем более если вы подключаете его как custom-коннектор в claude.ai — там HTTPS обязателен), обязательно ставьте перед ним TLS-терминацию: Cloudflare Tunnel, Tailscale Funnel, nginx/Caddy + Let's Encrypt и т.п. Без этого Bearer-токен (`MCP_SECRET`) в заголовке `Authorization` уходит в сеть открытым текстом.
+- Auth is an `Authorization: Bearer $MCP_SECRET` header on `/mcp`. Empty `MCP_SECRET` = no check (local network/VPN only).
+- `/.well-known/oauth-authorization-server` + `/oauth/authorize` + `/oauth/token` are a compatible stub for claude.ai custom connectors, which [don't support a static API key](https://claude.com/docs/connectors/building/authentication) — only full OAuth 2.1 or no auth at all. The actual protection is the Bearer token on `/mcp`. Via Claude Code CLI (`claude mcp add --header ...`) you don't need the stub.
+- `redirect_uri` in `/oauth/authorize` is checked against an allowlist (`claude.ai`, `anthropic.com`, `console.anthropic.com`, `localhost`).
+- The Pi-hole API can't filter `/queries` by `client=` server-side — the server pulls the last N (5000 by default) records across the whole network and filters them itself, with an explicit warning in the response if the window might not cover the target client's full history.
+- **Transport**: the server does not terminate TLS itself — it listens on plain HTTP. If it's reachable beyond localhost/a trusted LAN (and especially if you're connecting it as a custom connector in claude.ai, where HTTPS is required), put TLS termination in front of it: Cloudflare Tunnel, Tailscale Funnel, nginx/Caddy + Let's Encrypt, etc. Without that, the Bearer token (`MCP_SECRET`) in the `Authorization` header goes out in plaintext.
 
-## Требования
+## Requirements
 
-- Pi-hole v6.x (не v5 — эндпоинты `/api/...` появились только в v6).
+- Pi-hole v6.x (not v5 — the `/api/...` endpoints only appeared in v6).
 - Python 3.11+.
 
-## Лицензия
+## License
 
-MIT — см. [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
